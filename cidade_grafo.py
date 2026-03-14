@@ -63,7 +63,7 @@ def criar_cidade():
                 viz = grade_ids[linha][col + 1]
                 x2, y2 = G.nodes[viz]["pos"]
                 peso = round(np.sqrt((x2-x1)**2 + (y2-y1)**2), 2) # o peso é a distância euclidiana entre os dois nós
-                arestas_base.append(no, viz, peso, "horizontal")
+                arestas_base.append((no, viz, peso, "horizontal"))
 
             # vizinho acima
             if linha + 1 < GRADE:
@@ -156,7 +156,7 @@ def criar_cidade():
 # SALVA O GRAFO DA CIDADE EM UM ARQUIVO
 def salvar_cidade(G, grade_ids, saborexpress_no, info_restricoes):
     with open(MAPA_CIDADE, "wb") as mapa: # vai abrir o arquivo e escrever nele em formato binário, se o arquivo já existir, irá sobrescrever
-        pickle.dump("grafo": G, "grade_ids": grade_ids, "saborexpress_no":  saborexpress_no, "info_restricoes": info_restricoes}, mapa)
+        pickle.dump({"grafo": G, "grade_ids": grade_ids, "saborexpress_no":  saborexpress_no, "info_restricoes": info_restricoes}, mapa)
     print(f"  Cidade salva em '{MAPA_CIDADE}'") # mostra na saída qual o nome do arquivo que tem o mapa salvo
 
 # VISUAlIZAÇÃO DO MAPA
@@ -165,28 +165,82 @@ def visualizar_cidade(G, saborexpress_no, info_restricoes):
     hospital_no = info_restricoes["hospital_no"]
     nos_vel_reduzida = info_restricoes["nos_velocidade_reduzida"]
     nos_proib_carga = info_restricoes["nos_proibidos_carga"]
-    arestas_mao_unica = info_restricoes["arestas_mao_unica"]
 
     fig, ax = plt.subplots(figsize=(18, 18)) # cria a janela com 18x18 polegadas e a área do mapa delimitada pelos eixos
     ax.set_facecolor("#f7f4ef") # define a cor de fundo do mapa
     fig.patch.set_facecolor("#f7f4ef") # define a cor de fundo da janela
 
     # ARESTAS (RUAS)
-    for u, v in G.edges(): # busca as coordenadas de dois nós, u e v
-        xu, yu = G.nodes[u]["pos"]
+    desenhadas = set() # conjunto controle para não desenhar a mesma rua duas vezes, (u,v) e (v,u)
+    for u, v, dados in G.edges(data=True): # percorre todas as arestas
+        chave_bi = (min(u, v), max(u, v)) # cria uma chave única para cada aresta independente da direção
+        xu, yu = G.nodes[u]["pos"] # pega as coordenadas x e y dos dois nós da aresta
         xv, yv = G.nodes[v]["pos"]
-        ax.plot([xu, xv], [yu, yv], color="#aaaaaa", linewidth=0.8, zorder=1) # plota a linha (aresta) entre os nós representando a rua
+        
+        mao_unica = dados.get("mao_unica", False) # verifica se a aresta tem o atributo "mao_unica" e se não tiver retorna False como padrão
+        zona_lenta = dados.get("tipo_restricao") == "zona_lenta" # verifica se o atributo "tipo_restricao" da aresta é "zona_lenta" e retorna True ou False
+ 
+        if mao_unica: # se for mão única
+            cor = "#e67e22" # define a cor laranja para a "rua" mão única
+            lw  = 1.4 # define a espessura da linha no mapa
+            ax.annotate("", xy=(xv, yv), xytext=(xu, yu), arrowprops=dict(arrowstyle="->", color=cor, lw=1.5, mutation_scale=10), zorder=4) # desenha a aresta e uma seta laranja de u para v indicando direção da mão única
+
+        elif zona_lenta: # se for zona lenta
+            if chave_bi in desenhadas: # se já estiver no conjunto das desenhadas, ignora esta etapa e continua
+                continue
+            desenhadas.add(chave_bi) # se não estiver no conjunto, adiciona no conjunto
+            cor = "#f1c40f" # define a cor amarelo para a "rua" em zona lenta
+            lw  = 1.6 # define a espessura da linha no mapa
+            ax.plot([xu, xv], [yu, yv], color=cor, linewidth=lw, zorder=2) # desenha a aresta
+        else: # se não pertencer aos dois tipos acima (restante das arestas)
+            if chave_bi in desenhadas: # ignora se já estiver desenhada
+                continue
+            desenhadas.add(chave_bi) # se não estiver desenhada, adiciona no conjunto
+            cor = "#aaaaaa" # define a cor cinza
+            lw  = 0.8 # define a espessura da linha no mapa
+            ax.plot([xu, xv], [yu, yv], color=cor, linewidth=lw, zorder=1) # plota a aresta entre os nós
 
     # CRUZAMENTOS (NÓS)
-    cruzamentos = [numero for numero, dict in G.nodes(data=True) if dict["tipo"] == "cruzamento"] # pega somente os nós definidos como tipo cruzamento
-    xc = [G.nodes[numero]["pos"][0] for numero in cruzamentos]
-    yc = [G.nodes[numero]["pos"][1] for numero in cruzamentos]
-    ax.scatter(xc, yc, color="#2c3e50", s=10, zorder=2) # "distribui" os nós no mapa, para que fiquem por cima (zorder = 2) das linhas cruzadas (zorder = 1)
+    cruzamentos = [numero for numero, dict in G.nodes(data=True) if dict["tipo"] == "cruzamento" and not dict.get("proibido_carga")] # pega somente os nós definidos como tipo cruzamento e sem proibição de carga
+    xc = [G.nodes[numero]["pos"][0] for numero in cruzamentos] # cria lista com os x de cada cruzamento (nó)
+    yc = [G.nodes[numero]["pos"][1] for numero in cruzamentos] # cria lista com os y de cada cruzamento (nó)
+    ax.scatter(xc, yc, color="#2c3e50", s=10, zorder=2) # "distribui" os nós no mapa
+
+    # CRUZAMENTOS PROIBIDOS PARA CARGA
+    xp = [G.nodes[n]["pos"][0] for n in nos_proib_carga]
+    yp = [G.nodes[n]["pos"][1] for n in nos_proib_carga]
+    ax.scatter(xp, yp, color="#8e44ad", s=18, marker="s", zorder=3, label="Proibido carga")
+
+    # ZONAS VELOCIDADE REDUZIDA
+    xvr = [G.nodes[n]["pos"][0] for n in nos_vel_reduzida]
+    yvr = [G.nodes[n]["pos"][1] for n in nos_vel_reduzida]
+    ax.scatter(xvr, yvr, color="#f1c40f", s=60, alpha=0.18, zorder=2)
+
+    # ESCOLAS
+    for no_escola in escolas_nos: # para cada escola
+            xe, ye = G.nodes[no_escola]["pos"] # pega o x e y de cada escola
+            ax.scatter(xe, ye, color="#3498db", s=250, marker="s", zorder=6) # coloca no mapa o ponto de cada escola
+            ax.annotate("Escola", (xe, ye), textcoords="offset points", xytext=(8, 8), fontsize=9, fontweight="bold", color="#3498db", bbox=dict(boxstyle="round,pad=0.3", facecolor="white", edgecolor="#3498db", alpha=0.9)) # adiciona rótulo para identificar as escolas
+
+    # HOSPITAL
+    xh, yh = G.nodes[hospital_no]["pos"] # pega as coordenadas x e y do hospital
+    ax.scatter(xh, yh, color="#e74c3c", s=350, marker="P", zorder=6) # marca no mapa o hospital
+    ax.annotate("Hospital", (xh, yh), textcoords="offset points", xytext=(8, 8), fontsize=9, fontweight="bold", color="#e74c3c", bbox=dict(boxstyle="round,pad=0.3", facecolor="white", edgecolor="#e74c3c", alpha=0.9)) # adiciona rótulo para identificar o hopital no mapa
 
     # EMPRESA (Sabor Express)
     xse, yse = G.nodes[saborexpress_no]["pos"] # pega as coordenadas da empresa
-    ax.scatter(xse, yse, color="#e74c3c", s=150, marker="*", zorder=4) # plota o nó que representa a empresa em formato de estrela
-    ax.annotate("Sabor Express", (xse, yse), textcoords="offset points", xytext=(8, 8), fontsize=10, fontweight="bold", color="#e74c3c", bbox=dict(boxstyle="round,pad=0.3", facecolor="white", edgecolor="#e74c3c", alpha=0.9)) # plota o nome da empresa próximo do nó
+    ax.scatter(xse, yse, color="#27ae60", s=300, marker="*", zorder=7) # plota o nó que representa a empresa em formato de estrela
+    ax.annotate("Sabor Express", (xse, yse), textcoords="offset points", xytext=(8, 8), fontsize=10, fontweight="bold", color="#27ae60", bbox=dict(boxstyle="round,pad=0.3", facecolor="white", edgecolor="#27ae60", alpha=0.9)) # plota o nome da empresa próximo do nó
+    
+    # LEGENDA
+    legenda = [mpatches.Patch(color="#27ae60", label="Sabor Express"),
+               mpatches.Patch(color="#aaaaaa", label="Rua normal (mão dupla)"),
+               mpatches.Patch(color="#e67e22", label=f"Mão única ↗"),
+               mpatches.Patch(color="#f1c40f", label="Zona 30 km/h (escola/hospital)"),
+               mpatches.Patch(color="#8e44ad", label="Proibido carga"),
+               mpatches.Patch(color="#3498db", label="Escola"),
+               mpatches.Patch(color="#e74c3c", label="Hospital")] # define os itens da legenda
+    ax.legend(handles=legenda, loc="upper left", fontsize=9, facecolor="white", framealpha=0.95) # define características e posição da legenda no mapa
     ax.set_title("Mapa da Cidade — Malha 30×30", fontsize=14, fontweight="bold", pad=15) # plota o título do mapa
     ax.set_xlabel("x", fontsize=11) # plota o rótulo do eixo x como x
     ax.set_ylabel("y", fontsize=11) # plota o rótulo do eixo y como y
@@ -195,18 +249,22 @@ def visualizar_cidade(G, saborexpress_no, info_restricoes):
     plt.show() # execução final, abre a janela e mostra o mapa completo
 
 #  EXECUÇÃO (rodar apenas uma vez)
-print("=" * 55)
+print("=" * 60)
 print("  Criando malha 30×30...")
-print("=" * 55)
+print("=" * 60)
 
-G, grade_ids, saborexpress_no = criar_cidade()
-salvar_cidade(G, grade_ids, saborexpress_no)
-visualizar_cidade(G, saborexpress_no)
+G, grade_ids, saborexpress_no, info_restricoes = criar_cidade()
+salvar_cidade(G, grade_ids, saborexpress_no, info_restricoes)
+visualizar_cidade(G, saborexpress_no, info_restricoes)
 
 # após fechar o mapa mostra na saída a estrutura da cidade, quantidade de nós, posição da empresa e quantas arestas tem
 print(f"\n  Estrutura da cidade:")
-print(f"    Nós (cruzamentos): {G.number_of_nodes() - 1}")
-print(f"    Sabor Express:     1  → pos={G.nodes[saborexpress_no]["pos"]}")
+print(f"    Nós (cruzamentos): {G.number_of_nodes() - 1 - len(info_restricoes['escolas_nos']) - 1}")
+print(f"    Escolas:           {len(info_restricoes['escolas_nos'])}")
+print(f"    Hospital:          1")
+print(f"    Sabor Express:     1  → pos={G.nodes[saborexpress_no]['pos']}")
 print(f"    Total de nós:      {G.number_of_nodes()}")
 print(f"    Arestas (ruas):    {G.number_of_edges()}")
-print(f"    Grafo conexo:      {nx.is_connected(G)}")
+print(f"    Mão única:         {sum(1 for u,v,d in G.edges(data=True) if d.get('mao_unica'))}")
+print(f"    Zona 30 km/h:      {sum(1 for u,v,d in G.edges(data=True) if d.get('tipo_restricao')=='zona_lenta')}")
+print(f"    Proibido carga:    {len(info_restricoes['nos_proibidos_carga'])} nós")
