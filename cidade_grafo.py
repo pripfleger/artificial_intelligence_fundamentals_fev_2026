@@ -26,7 +26,7 @@ def criar_cidade():
     random.seed(SEED_CIDADE) # fixa o random, usado para gerar as posições (x, y) dos nós, garantindo que o mapa não mude
     np.random.seed(SEED_CIDADE) # fixa o numpy, usado pra cálculos, ambos garantem que os nós do mapa sejam sempre os mesmos
 
-    G = nx.Graph() # gera um grafo dirigido em branco (permite fazer direção única para simular rua de mão única)
+    G = nx.DiGraph() # gera um grafo dirigido em branco (permite fazer direção única para simular rua de mão única)
 
     def gerar_posicoes(n): # gera n posições a partir de 0, com espaçamentos variáveis, para parecer um pouco mais real
         posicoes = [0]
