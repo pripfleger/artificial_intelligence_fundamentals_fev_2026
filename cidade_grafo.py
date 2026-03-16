@@ -142,8 +142,6 @@ def criar_cidade():
     for n in nos_proibidos: # marca de fato os nós sorteados como proibidos
         G.nodes[n]["proibido_carga"] = True
  
-    print(f"  Nós proibidos para carga: {len(nos_proibidos)}") # mostra na saída a quantidade de nós proibidos
-
     info_restricoes = {
         "escolas_nos": escolas_nos,
         "hospital_no": hospital_no,
@@ -249,22 +247,10 @@ def visualizar_cidade(G, saborexpress_no, info_restricoes):
     plt.show() # execução final, abre a janela e mostra o mapa completo
 
 #  EXECUÇÃO (rodar apenas uma vez)
-print("=" * 60)
+
 print("  Criando malha 30×30...")
-print("=" * 60)
 
-G, grade_ids, saborexpress_no, info_restricoes = criar_cidade()
-salvar_cidade(G, grade_ids, saborexpress_no, info_restricoes)
-visualizar_cidade(G, saborexpress_no, info_restricoes)
 
-# após fechar o mapa mostra na saída a estrutura da cidade, quantidade de nós, posição da empresa e quantas arestas tem
-print(f"\n  Estrutura da cidade:")
-print(f"    Nós (cruzamentos): {G.number_of_nodes() - 1 - len(info_restricoes['escolas_nos']) - 1}")
-print(f"    Escolas:           {len(info_restricoes['escolas_nos'])}")
-print(f"    Hospital:          1")
-print(f"    Sabor Express:     1  → pos={G.nodes[saborexpress_no]['pos']}")
-print(f"    Total de nós:      {G.number_of_nodes()}")
-print(f"    Arestas (ruas):    {G.number_of_edges()}")
-print(f"    Mão única:         {sum(1 for u,v,d in G.edges(data=True) if d.get('mao_unica'))}")
-print(f"    Zona 30 km/h:      {sum(1 for u,v,d in G.edges(data=True) if d.get('tipo_restricao')=='zona_lenta')}")
-print(f"    Proibido carga:    {len(info_restricoes['nos_proibidos_carga'])} nós")
+G, grade_ids, saborexpress_no, info_restricoes = criar_cidade() # cria a cidade
+salvar_cidade(G, grade_ids, saborexpress_no, info_restricoes) # salva em arquivo
+visualizar_cidade(G, saborexpress_no, info_restricoes) # abre e mostra o mapa
